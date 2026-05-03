@@ -470,6 +470,13 @@ select:focus {
   filter: brightness(1.06);
 }
 
+.today-match-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+  transform: none;
+  filter: none;
+}
+
 .button-icon {
   min-width: 30px;
   height: 24px;

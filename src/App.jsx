@@ -16,17 +16,184 @@ const initialConditions = {
   tossDecision: "Unknown",
 };
 
-const todaysMatch = {
-  teamIds: ["mi", "csk"],
-  conditions: {
-    venue: "Wankhede",
-    pitchType: "Batting Friendly",
-    timing: "Night Match (Dew Advantage)",
-    toss: "Unknown",
-    tossDecision: "Unknown",
-  },
-  message: "Today's match loaded: Mumbai Indians vs Chennai Super Kings at Wankhede, 7:30 PM IST.",
+const IPL_TIMEZONE = "Asia/Kolkata";
+const IPL_2026_SCHEDULE_URL = "https://scores.iplt20.com/ipl/feeds/284-matchschedule.js";
+
+const scheduleTeamNameToId = {
+  "Chennai Super Kings": "csk",
+  "Mumbai Indians": "mi",
+  "Royal Challengers Bengaluru": "rcb",
+  "Royal Challengers Bangalore": "rcb",
+  "Kolkata Knight Riders": "kkr",
+  "Rajasthan Royals": "rr",
+  "Sunrisers Hyderabad": "srh",
+  "Delhi Capitals": "dc",
+  "Punjab Kings": "pbks",
+  "Lucknow Super Giants": "lsg",
+  "Gujarat Titans": "gt",
 };
+
+function getIplTodayDateString() {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: IPL_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = formatter.formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value ?? "0000";
+  const month = parts.find((part) => part.type === "month")?.value ?? "00";
+  const day = parts.find((part) => part.type === "day")?.value ?? "00";
+
+  return `${year}-${month}-${day}`;
+}
+
+function getIplNowMinutes() {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: IPL_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(new Date());
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? "0");
+
+  return hour * 60 + minute;
+}
+
+function loadIplSchedule() {
+  return new Promise((resolve, reject) => {
+    const callbackName = "MatchSchedule";
+    const scriptId = "ipl-2026-schedule-feed";
+    const existingScript = document.getElementById(scriptId);
+    const previousCallback = window[callbackName];
+    let timeoutId = null;
+
+    if (existingScript) {
+      existingScript.remove();
+    }
+
+    const cleanup = () => {
+      window.clearTimeout(timeoutId);
+      document.getElementById(scriptId)?.remove();
+
+      if (typeof previousCallback === "function") {
+        window[callbackName] = previousCallback;
+      } else {
+        delete window[callbackName];
+      }
+    };
+
+    window[callbackName] = (data) => {
+      cleanup();
+      resolve(data?.Matchsummary ?? []);
+    };
+
+    const script = document.createElement("script");
+    script.id = scriptId;
+    script.src = `${IPL_2026_SCHEDULE_URL}?v=${Date.now()}`;
+    script.async = true;
+    script.onerror = () => {
+      cleanup();
+      reject(new Error("Unable to load IPL 2026 schedule."));
+    };
+
+    timeoutId = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("IPL schedule request timed out."));
+    }, 10000);
+
+    document.body.appendChild(script);
+  });
+}
+
+function mapGroundToVenue(match) {
+  const groundName = (match.GroundName || "").toLowerCase();
+  const city = (match.city || "").toLowerCase();
+  const homeTeamName = match.HomeTeamName || "";
+  const homeTeamId = scheduleTeamNameToId[homeTeamName];
+  const homeTeam = teams.find((team) => team.id === homeTeamId);
+
+  if (groundName.includes("wankhede")) {
+    return "Wankhede";
+  }
+
+  if (groundName.includes("chinnaswamy")) {
+    return "Chinnaswamy";
+  }
+
+  if (groundName.includes("chidambaram") || groundName.includes("chepauk")) {
+    return "Chepauk";
+  }
+
+  if (groundName.includes("eden")) {
+    return "Eden Gardens";
+  }
+
+  if (groundName.includes("arun jaitley") || city.includes("delhi")) {
+    return "Arun Jaitley";
+  }
+
+  if (groundName.includes("narendra modi") || city.includes("ahmedabad")) {
+    return "Narendra Modi Stadium";
+  }
+
+  if (groundName.includes("sawai")) {
+    return "Sawai Mansingh";
+  }
+
+  if (groundName.includes("rajiv gandhi") || city.includes("hyderabad")) {
+    return "Rajiv Gandhi Stadium";
+  }
+
+  if (
+    groundName.includes("pca") ||
+    groundName.includes("mullanpur") ||
+    groundName.includes("dharamsala") ||
+    city.includes("mohali")
+  ) {
+    return "Mohali";
+  }
+
+  if (groundName.includes("ekana") || city.includes("lucknow")) {
+    return "Lucknow";
+  }
+
+  if (groundName.includes("barsapara") || city.includes("guwahati")) {
+    return "Sawai Mansingh";
+  }
+
+  return homeTeam?.homeVenue ?? "";
+}
+
+function getMatchTimingFromFeed(matchTime) {
+  const hour = Number(String(matchTime).split(":")[0]);
+
+  return hour >= 18 ? "Night Match (Dew Advantage)" : "Day Match";
+}
+
+function getPreferredTodayMatchIndex(matches) {
+  const liveIndex = matches.findIndex((match) => match.MatchStatus === "Live");
+
+  if (liveIndex >= 0) {
+    return liveIndex;
+  }
+
+  const nowMinutes = getIplNowMinutes();
+  const upcomingIndex = matches.findIndex((match) => {
+    const [hour = "0", minute = "0"] = String(match.MatchTime).split(":");
+    const matchMinutes = Number(hour) * 60 + Number(minute);
+
+    return match.MatchStatus === "UpComing" && matchMinutes >= nowMinutes - 15;
+  });
+
+  if (upcomingIndex >= 0) {
+    return upcomingIndex;
+  }
+
+  return 0;
+}
 
 function App() {
   const [selectedTeamIds, setSelectedTeamIds] = useState([]);
@@ -34,9 +201,16 @@ function App() {
   const [pitchAdvice, setPitchAdvice] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [todayMatchLoading, setTodayMatchLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [recommendedTeamId, setRecommendedTeamId] = useState("");
   const timerRef = useRef(null);
+  const scheduleCacheRef = useRef(null);
+  const todayMatchCycleRef = useRef({
+    date: "",
+    index: -1,
+    total: 0,
+  });
 
   const selectedTeams = useMemo(
     () => selectedTeamIds.map((id) => teams.find((team) => team.id === id)),
@@ -109,14 +283,90 @@ function App() {
   };
 
   const handleUseTodaysMatch = () => {
-    window.clearTimeout(timerRef.current);
-    setSelectedTeamIds(todaysMatch.teamIds);
-    setConditions(todaysMatch.conditions);
-    setPitchAdvice(todaysMatch.message);
-    setError("");
-    setLoading(false);
-    setResult(null);
-    setRecommendedTeamId("");
+    const loadTodayMatch = async () => {
+      setTodayMatchLoading(true);
+      setError("");
+      window.clearTimeout(timerRef.current);
+      setLoading(false);
+      setResult(null);
+      setRecommendedTeamId("");
+
+      try {
+        if (!scheduleCacheRef.current) {
+          scheduleCacheRef.current = loadIplSchedule();
+        }
+
+        const schedule = await scheduleCacheRef.current;
+        const todayDate = getIplTodayDateString();
+        const todaysMatches = schedule
+          .filter((match) => match.MatchDate === todayDate)
+          .sort((firstMatch, secondMatch) =>
+            String(firstMatch.MatchTime).localeCompare(String(secondMatch.MatchTime))
+          );
+
+        if (todaysMatches.length === 0) {
+          setPitchAdvice("");
+          setError(`No IPL match is scheduled for ${todayDate}.`);
+          todayMatchCycleRef.current = {
+            date: todayDate,
+            index: -1,
+            total: 0,
+          };
+          return;
+        }
+
+        const isSameDaySelection =
+          todayMatchCycleRef.current.date === todayDate &&
+          todayMatchCycleRef.current.total === todaysMatches.length;
+        const startIndex = getPreferredTodayMatchIndex(todaysMatches);
+        const nextIndex = isSameDaySelection
+          ? (todayMatchCycleRef.current.index + 1) % todaysMatches.length
+          : startIndex;
+        const match = todaysMatches[nextIndex];
+        const venue = mapGroundToVenue(match);
+        const timing = getMatchTimingFromFeed(match.MatchTime);
+        const suggestedPitch = getPitchSuggestion(venue, timing);
+        const teamIds = [
+          scheduleTeamNameToId[match.HomeTeamName],
+          scheduleTeamNameToId[match.AwayTeamName],
+        ].filter(Boolean);
+
+        if (teamIds.length !== 2 || !venue) {
+          setPitchAdvice("");
+          setError("Today's IPL fixture could not be mapped to the current app teams.");
+          return;
+        }
+
+        setSelectedTeamIds(teamIds);
+        setConditions({
+          venue,
+          pitchType: suggestedPitch?.pitchType ?? "",
+          timing,
+          toss: "Unknown",
+          tossDecision: "Unknown",
+        });
+        setPitchAdvice(
+          `Today's match loaded: ${match.HomeTeamName} vs ${match.AwayTeamName} at ${venue}.${
+            todaysMatches.length > 1
+              ? ` Loaded ${nextIndex + 1} of ${todaysMatches.length} matches for today. Click again to switch.`
+              : ""
+          }`
+        );
+        todayMatchCycleRef.current = {
+          date: todayDate,
+          index: nextIndex,
+          total: todaysMatches.length,
+        };
+      } catch (todayMatchError) {
+        scheduleCacheRef.current = null;
+        setPitchAdvice("");
+        setError(todayMatchError.message || "Unable to load today's IPL match.");
+      } finally {
+        setTodayMatchLoading(false);
+      }
+    };
+
+    loadTodayMatch();
   };
 
   const validate = () => {
@@ -250,9 +500,14 @@ function App() {
             <h2>Match Setup</h2>
           </div>
 
-          <button className="today-match-button" type="button" onClick={handleUseTodaysMatch}>
+          <button
+            className="today-match-button"
+            type="button"
+            onClick={handleUseTodaysMatch}
+            disabled={todayMatchLoading}
+          >
             <span className="button-icon">T</span>
-            Use Today's Match
+            {todayMatchLoading ? "Loading Today's Match..." : "Use Today's Match"}
           </button>
 
           <div className="form-grid">

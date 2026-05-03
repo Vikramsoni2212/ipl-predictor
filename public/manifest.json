@@ -1,0 +1,12 @@
+{
+  "background_color": "#000000",
+  "description": "IPL 2026 match prediction app for team, venue, pitch, toss, and dew based winner picks.",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "IPL Match Winner Predictor",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "IPL Predictor",
+  "start_url": "/",
+  "theme_color": "#00ff88"
+}

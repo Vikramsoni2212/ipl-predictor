@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>ipl/competition.js</Key><RequestId>J4GSJJNGYXYHYZXW</RequestId><HostId>X5KnnmvS97oCA3xToyFRkQriv/7srTVOd2tEv1pXONNhzFAqtSShRk7VGuL4fx1zzyVLPOvCi/YN2PcX3u1Edm9uTIA7b3aG</HostId></Error>
